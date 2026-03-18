@@ -4,7 +4,7 @@ import os
 app = Flask(__name__)
 
 # temporary storage (pwede natin palitan ng DB later)
-inventory_data = []
+inventory_data = {}
 
 @app.route("/")
 def home():
@@ -14,8 +14,8 @@ def home():
 @app.route("/sync_inventory", methods=["POST"])
 def sync_inventory():
     global inventory_data
-    inventory_data = request.json
-    print("INVENTORY RECEIVED:", inventory_data)
+    inventory_data = request.json  # full object na
+    print("FULL INVENTORY RECEIVED")
     return jsonify({"status": "saved"})
 
 # 👉 GET INVENTORY (para sa web dashboard mo)
