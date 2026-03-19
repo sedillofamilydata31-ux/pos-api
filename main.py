@@ -71,5 +71,26 @@ def get_summary():
 
     return jsonify(result)
 
+
+@app.route("/sync_sales", methods=["POST"])
+def sync_sales():
+    data = request.json
+
+    with open("sales.json", "w") as f:
+        json.dump(data, f)
+
+    return {"status": "ok"}
+
+
+
+@app.route("/sync_sales", methods=["POST"])
+def sync_sales():
+    data = request.json
+
+    with open("sales.json", "w") as f:
+        json.dump(data, f)
+
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
