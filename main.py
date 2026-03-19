@@ -141,9 +141,20 @@ def get_sales_summary():
     for item in items:
         name = f"{item.get('model', 'N/A')} {item.get('variant', '')}"
 
-        subtotal = float(item.get("subtotal", 0))
-        profit = float(item.get("profit", 0))
-        qty = int(item.get("qty", 1))
+        try:
+            subtotal = float(item.get("subtotal") or 0)
+        except:
+            subtotal = 0
+
+        try:
+            profit = float(item.get("profit") or 0)
+        except:
+            profit = 0
+
+        try:
+            qty = int(item.get("qty") or 1)
+        except:
+            qty = 1
 
         total_sales += subtotal
         total_profit += profit
