@@ -139,18 +139,21 @@ def get_sales_summary():
     summary = {}
 
     for item in items:
-        name = f"{item['model']} {item['variant']}"
+        name = f"{item.get('model', 'N/A')} {item.get('variant', '')}"
 
-        total_sales += float(item.get("subtotal", 0))
-        total_profit += float(item.get("profit", 0))
+        subtotal = float(item.get("subtotal", 0))
+        profit = float(item.get("profit", 0))
+        qty = int(item.get("qty", 1))
+
+        total_sales += subtotal
+        total_profit += profit
 
         if name not in summary:
             summary[name] = {"qty": 0, "sales": 0}
 
-        summary[name]["qty"] += int(item.get("qty", 1))
-        summary[name]["sales"] += float(item.get("subtotal", 0))
+        summary[name]["qty"] += qty
+        summary[name]["sales"] += subtotal
 
-    # convert to list
     top_items = []
     for name, v in summary.items():
         top_items.append({
@@ -159,7 +162,6 @@ def get_sales_summary():
             "sales": v["sales"]
         })
 
-    # sort top items
     top_items.sort(key=lambda x: x["qty"], reverse=True)
 
     return {
