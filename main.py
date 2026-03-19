@@ -10,11 +10,16 @@ inventory_data = {}
 def home():
     return "API RUNNING"
 
-# 👉 SAVE INVENTORY (galing POS mo)
+
 @app.route("/sync_inventory", methods=["POST"])
 def sync_inventory():
     global inventory_data
-    inventory_data = request.json  # full object na
+    inventory_data = request.json
+
+    # 🔥 SAVE TO FILE
+    with open("inventory.json", "w") as f:
+        json.dump(inventory_data, f)
+
     print("FULL INVENTORY RECEIVED")
     return jsonify({"status": "saved"})
 
