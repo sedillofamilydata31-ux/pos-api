@@ -168,6 +168,43 @@ def get_sales_summary():
         "top_items": top_items[:10]
     }
 
+
+#===============================
+# GET TABLE SUMMARY
+#===============================
+    
+@app.route("/get_sales_table", methods=["GET"])
+def get_sales_table():
+    try:
+        with open("sales.json") as f:
+            data = json.load(f)
+    except:
+        return []
+
+    transactions = data.get("transactions", [])
+
+    result = []
+
+    for t in transactions:
+        result.append({
+            "transaction_id": t.get("transaction_id"),
+            "customer": t.get("customer_name"),
+            "type": t.get("transaction_type"),
+            "cashier": t.get("cashier_name"),
+            "datetime": t.get("datetime"),
+            "subtotal": t.get("subtotal"),
+            "discount": t.get("discount"),
+            "tax": t.get("tax"),
+            "total": t.get("total_amount"),
+            "status": t.get("status"),
+            "payment_mode": t.get("payment_mode")
+        })
+
+    # optional sort (latest first)
+    result.sort(key=lambda x: x["datetime"], reverse=True)
+
+    return result
+
 # ==============================
 # RUN SERVER
 # ==============================
