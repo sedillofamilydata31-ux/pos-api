@@ -4,37 +4,60 @@ import json
 
 app = Flask(__name__)
 
-# temporary storage (pwede natin palitan ng DB later)
-inventory_data = {}
+# ==============================
+# LOAD EXISTING DATA (PERSIST)
+# ==============================
 
-# 🔥 LOAD EXISTING FILE (para di mawala pag restart)
+inventory_data = {}
+sales_data = {"transactions": [], "items": []}
+
 if os.path.exists("inventory.json"):
     with open("inventory.json") as f:
         inventory_data = json.load(f)
+
+if os.path.exists("sales.json"):
+    with open("sales.json") as f:
+        sales_data = json.load(f)
+
+
+# ==============================
+# HOME
+# ==============================
 
 @app.route("/")
 def home():
     return "API RUNNING"
 
-# 👉 SAVE INVENTORY (galing POS mo)
+
+# ==============================
+# INVENTORY SYNC
+# ==============================
+
 @app.route("/sync_inventory", methods=["POST"])
 def sync_inventory():
     global inventory_data
     inventory_data = request.json
 
-    # 🔥 SAVE TO FILE
     with open("inventory.json", "w") as f:
         json.dump(inventory_data, f)
 
     print("FULL INVENTORY RECEIVED")
     return jsonify({"status": "saved"})
 
-# 👉 GET INVENTORY (raw data)
+
+# ==============================
+# GET INVENTORY
+# ==============================
+
 @app.route("/get_inventory", methods=["GET"])
 def get_inventory():
     return jsonify(inventory_data)
 
-# 👉 GET SUMMARY (processed / grouped)
+
+# ==============================
+# INVENTORY SUMMARY
+# ==============================
+
 @app.route("/get_summary", methods=["GET"])
 def get_summary():
     summary = {}
@@ -66,31 +89,40 @@ def get_summary():
             "price": v["price"]
         })
 
-    # 🔥 SORT (optional pero maganda)
+    # sort by highest qty
     result.sort(key=lambda x: x["qty"], reverse=True)
 
     return jsonify(result)
 
 
-@app.route("/sync_sales", methods=["POST"])
-def sync_sales():
-    data = request.json
-
-    with open("sales.json", "w") as f:
-        json.dump(data, f)
-
-    return {"status": "ok"}
-
-
+# ==============================
+# SALES SYNC
+# ==============================
 
 @app.route("/sync_sales", methods=["POST"])
 def sync_sales():
-    data = request.json
+    global sales_data
+    sales_data = request.json
 
     with open("sales.json", "w") as f:
-        json.dump(data, f)
+        json.dump(sales_data, f)
 
-    return {"status": "ok"}
+    print("SALES RECEIVED")
+    return jsonify({"status": "saved"})
+
+
+# ==============================
+# GET SALES
+# ==============================
+
+@app.route("/get_sales", methods=["GET"])
+def get_sales():
+    return jsonify(sales_data)
+
+
+# ==============================
+# RUN SERVER
+# ==============================
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
