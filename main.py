@@ -1,16 +1,22 @@
 from flask import Flask, request, jsonify
 import os
+import json
 
 app = Flask(__name__)
 
 # temporary storage (pwede natin palitan ng DB later)
 inventory_data = {}
 
+# 🔥 LOAD EXISTING FILE (para di mawala pag restart)
+if os.path.exists("inventory.json"):
+    with open("inventory.json") as f:
+        inventory_data = json.load(f)
+
 @app.route("/")
 def home():
     return "API RUNNING"
 
-
+# 👉 SAVE INVENTORY (galing POS mo)
 @app.route("/sync_inventory", methods=["POST"])
 def sync_inventory():
     global inventory_data
@@ -23,12 +29,12 @@ def sync_inventory():
     print("FULL INVENTORY RECEIVED")
     return jsonify({"status": "saved"})
 
-# 👉 GET INVENTORY (para sa web dashboard mo)
+# 👉 GET INVENTORY (raw data)
 @app.route("/get_inventory", methods=["GET"])
 def get_inventory():
     return jsonify(inventory_data)
 
-
+# 👉 GET SUMMARY (processed / grouped)
 @app.route("/get_summary", methods=["GET"])
 def get_summary():
     summary = {}
@@ -42,7 +48,7 @@ def get_summary():
 
         summary[name]["qty"] += 1
 
-    # non-serial
+    # non-serial items
     for item in inventory_data.get("nonserial", []):
         name = f"{item['model']} {item['variant']} {item['parts']}"
 
@@ -59,6 +65,9 @@ def get_summary():
             "qty": v["qty"],
             "price": v["price"]
         })
+
+    # 🔥 SORT (optional pero maganda)
+    result.sort(key=lambda x: x["qty"], reverse=True)
 
     return jsonify(result)
 
