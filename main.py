@@ -133,31 +133,59 @@ def get_sales_summary():
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
     transactions = data.get("transactions", [])
-    root_items = data.get("items", [])  # 🔥 NON-SERIAL SOURCE
 
     total_sales = 0
     total_profit = 0
     summary = {}
 
     # ========================
-    # 🔥 PROCESS TRANSACTIONS (SERIAL)
+    # LOOP ALL TRANSACTIONS
     # ========================
     for trx in transactions:
 
+        # total sales
         try:
             total_sales += float(trx.get("total_amount") or 0)
         except:
             pass
 
-        for item in trx.get("items", []):
+        items = trx.get("items", [])
 
+        for item in items:
+
+            # NAME
             name = item.get("name")
             if not name:
                 name = f"{item.get('model','')} {item.get('variant','')}".strip()
 
-            qty = int(item.get("qty") or 1)
-            subtotal = float(item.get("subtotal") or 0)
-            profit = float(item.get("profit") or 0)
+            if not name:
+                continue
+
+            # QTY
+            try:
+                qty = int(item.get("qty") or 1)
+            except:
+                qty = 1
+
+            # SUBTOTAL
+            try:
+                subtotal = float(item.get("subtotal") or 0)
+            except:
+                subtotal = 0
+
+            # fallback (important for non-serial)
+            if subtotal == 0:
+                try:
+                    price = float(item.get("price") or 0)
+                    subtotal = price * qty
+                except:
+                    subtotal = 0
+
+            # PROFIT
+            try:
+                profit = float(item.get("profit") or 0)
+            except:
+                profit = 0
 
             total_profit += profit
 
@@ -168,34 +196,6 @@ def get_sales_summary():
             summary[name]["sales"] += subtotal
 
     # ========================
-    # 🔥 PROCESS ROOT ITEMS (NON-SERIAL)
-    # ========================
-    for item in root_items:
-
-        name = item.get("name")
-        if not name:
-            name = f"{item.get('model','')} {item.get('variant','')}".strip()
-
-        qty = int(item.get("qty") or 1)
-
-        # fallback subtotal
-        subtotal = float(item.get("subtotal") or 0)
-        if subtotal == 0:
-            price = float(item.get("price") or 0)
-            subtotal = price * qty
-
-        profit = float(item.get("profit") or 0)
-
-        total_profit += profit
-        total_sales += subtotal
-
-        if name not in summary:
-            summary[name] = {"qty": 0, "sales": 0}
-
-        summary[name]["qty"] += qty
-        summary[name]["sales"] += subtotal
-
-    # ========================
     # FINAL LIST
     # ========================
     top_items = [
@@ -203,7 +203,7 @@ def get_sales_summary():
         for k, v in summary.items()
     ]
 
-    # 🔥 SORT BY QTY
+    # 🔥 SORT BY QTY (top selling)
     top_items.sort(key=lambda x: x["qty"], reverse=True)
 
     return {
