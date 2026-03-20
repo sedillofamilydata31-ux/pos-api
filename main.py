@@ -58,41 +58,83 @@ def get_inventory():
 # INVENTORY SUMMARY
 # ==============================
 
-@app.route("/get_summary", methods=["GET"])
-def get_summary():
+@app.route("/get_sales_summary", methods=["GET"])
+def get_sales_summary():
+    try:
+        with open("sales.json") as f:
+            data = json.load(f)
+    except:
+        return {"total_sales": 0, "total_profit": 0, "top_items": []}
+
+    transactions = data.get("transactions", [])
+
+    total_sales = 0
+    total_profit = 0
     summary = {}
 
-    # batch items
-    for item in inventory_data.get("batch", []):
-        name = f"{item['model']} {item['variant']} {item['parts']}"
+    for trx in transactions:
 
-        if name not in summary:
-            summary[name] = {"qty": 0, "price": item["srp"]}
+        # total per transaction
+        try:
+            total_sales += float(trx.get("total_amount") or 0)
+        except:
+            pass
 
-        summary[name]["qty"] += 1
+        # 🔥 loop items inside each transaction
+        for item in trx.get("items", []):
 
-    # non-serial items
-    for item in inventory_data.get("nonserial", []):
-        name = f"{item['model']} {item['variant']} {item['parts']}"
+            # 🔥 HANDLE BOTH SERIAL + NON-SERIAL
+            name = item.get("name")
 
-        if name not in summary:
-            summary[name] = {"qty": 0, "price": item["srp"]}
+            if not name:
+                model = item.get("model", "")
+                variant = item.get("variant", "")
+                parts = item.get("parts", "")
+                name = f"{model} {variant} {parts}".strip()
 
-        summary[name]["qty"] += int(item["qty"])
+            # qty
+            try:
+                qty = int(item.get("qty") or 1)
+            except:
+                qty = 1
+
+            # sales
+            try:
+                subtotal = float(item.get("subtotal") or 0)
+            except:
+                subtotal = 0
+
+            # profit
+            try:
+                profit = float(item.get("profit") or 0)
+            except:
+                profit = 0
+
+            total_profit += profit
+
+            if name not in summary:
+                summary[name] = {"qty": 0, "sales": 0}
+
+            summary[name]["qty"] += qty
+            summary[name]["sales"] += subtotal
 
     # convert to list
-    result = []
+    top_items = []
     for name, v in summary.items():
-        result.append({
+        top_items.append({
             "name": name,
             "qty": v["qty"],
-            "price": v["price"]
+            "sales": v["sales"]
         })
 
-    # sort by highest qty
-    result.sort(key=lambda x: x["qty"], reverse=True)
+    # sort top selling
+    top_items.sort(key=lambda x: x["qty"], reverse=True)
 
-    return jsonify(result)
+    return {
+        "total_sales": total_sales,
+        "total_profit": total_profit,
+        "top_items": top_items[:10]
+    }
 
 
 # ==============================
