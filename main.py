@@ -132,15 +132,15 @@ def get_sales_summary():
     except:
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-    transactions = data.get("transactions", [])
-    root_items = data.get("items", [])
+    transactions = data.get("transactions") or []
+    root_items = data.get("items") or []
 
     total_sales = 0
     total_profit = 0
     summary = {}
 
     # ========================
-    # FROM TRANSACTIONS (SERIAL)
+    # SAFE LOOP: TRANSACTIONS
     # ========================
     for trx in transactions:
 
@@ -149,7 +149,9 @@ def get_sales_summary():
         except:
             pass
 
-        for item in trx.get("items", []):
+        trx_items = trx.get("items") or []
+
+        for item in trx_items:
 
             name = item.get("name") or f"{item.get('model','')} {item.get('variant','')}".strip()
             if not name:
@@ -172,7 +174,7 @@ def get_sales_summary():
             summary[name]["sales"] += subtotal
 
     # ========================
-    # FROM ROOT ITEMS (NON-SERIAL)
+    # SAFE LOOP: ROOT ITEMS
     # ========================
     for item in root_items:
 
@@ -198,14 +200,14 @@ def get_sales_summary():
         summary[name]["sales"] += subtotal
 
     # ========================
-    # FINAL
+    # FINAL LIST
     # ========================
     top_items = [
         {"name": k, "qty": v["qty"], "sales": v["sales"]}
         for k, v in summary.items()
     ]
 
-    # 🔥 IMPORTANT: SORT BY QTY (TOP SELLING)
+    # 🔥 SORT BY QTY (TOP SELLING)
     top_items.sort(key=lambda x: x["qty"], reverse=True)
 
     return {
