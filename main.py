@@ -19,6 +19,7 @@ if os.path.exists("sales.json"):
     with open("sales.json") as f:
         sales_data = json.load(f)
 
+
 # ==============================
 # HOME
 # ==============================
@@ -26,6 +27,7 @@ if os.path.exists("sales.json"):
 @app.route("/")
 def home():
     return "API RUNNING"
+
 
 # ==============================
 # INVENTORY SYNC
@@ -42,6 +44,7 @@ def sync_inventory():
     print("FULL INVENTORY RECEIVED")
     return jsonify({"status": "saved"})
 
+
 # ==============================
 # GET INVENTORY
 # ==============================
@@ -49,6 +52,7 @@ def sync_inventory():
 @app.route("/get_inventory", methods=["GET"])
 def get_inventory():
     return jsonify(inventory_data)
+
 
 # ==============================
 # INVENTORY SUMMARY
@@ -61,17 +65,22 @@ def get_summary():
     # batch items
     for item in inventory_data.get("batch", []):
         name = f"{item['model']} {item['variant']} {item['parts']}"
+
         if name not in summary:
             summary[name] = {"qty": 0, "price": item["srp"]}
+
         summary[name]["qty"] += 1
 
     # non-serial items
     for item in inventory_data.get("nonserial", []):
         name = f"{item['model']} {item['variant']} {item['parts']}"
+
         if name not in summary:
             summary[name] = {"qty": 0, "price": item["srp"]}
+
         summary[name]["qty"] += int(item["qty"])
 
+    # convert to list
     result = []
     for name, v in summary.items():
         result.append({
@@ -80,9 +89,11 @@ def get_summary():
             "price": v["price"]
         })
 
+    # sort by highest qty
     result.sort(key=lambda x: x["qty"], reverse=True)
 
     return jsonify(result)
+
 
 # ==============================
 # SALES SYNC
@@ -99,6 +110,7 @@ def sync_sales():
     print("SALES RECEIVED")
     return jsonify({"status": "saved"})
 
+
 # ==============================
 # GET SALES
 # ==============================
@@ -107,9 +119,10 @@ def sync_sales():
 def get_sales():
     return jsonify(sales_data)
 
-# ==============================
-# GET SALES SUMMARY (FIXED 🔥)
-# ==============================
+
+#===============================
+# GET SALES SUMMARY
+#===============================
 
 @app.route("/get_sales_summary", methods=["GET"])
 def get_sales_summary():
@@ -119,55 +132,38 @@ def get_sales_summary():
     except:
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-    transactions = data.get("transactions", [])
+    items = data.get("items", [])
 
     total_sales = 0
     total_profit = 0
     summary = {}
 
-    for trx in transactions:
+    for item in items:
+        name = f"{item.get('model', 'N/A')} {item.get('variant', '')}"
 
-        # total sales
         try:
-            total_sales += float(trx.get("total_amount") or 0)
+            subtotal = float(item.get("subtotal") or 0)
         except:
-            pass
+            subtotal = 0
 
-        for item in trx.get("items", []):
+        try:
+            profit = float(item.get("profit") or 0)
+        except:
+            profit = 0
 
-            # unify name (serial + non-serial)
-            name = item.get("name")
-            if not name:
-                model = item.get("model", "")
-                variant = item.get("variant", "")
-                parts = item.get("parts", "")
-                name = f"{model} {variant} {parts}".strip()
+        try:
+            qty = int(item.get("qty") or 1)
+        except:
+            qty = 1
 
-            # qty
-            try:
-                qty = int(item.get("qty") or 1)
-            except:
-                qty = 1
+        total_sales += subtotal
+        total_profit += profit
 
-            # subtotal
-            try:
-                subtotal = float(item.get("subtotal") or 0)
-            except:
-                subtotal = 0
+        if name not in summary:
+            summary[name] = {"qty": 0, "sales": 0}
 
-            # profit
-            try:
-                profit = float(item.get("profit") or 0)
-            except:
-                profit = 0
-
-            total_profit += profit
-
-            if name not in summary:
-                summary[name] = {"qty": 0, "sales": 0}
-
-            summary[name]["qty"] += qty
-            summary[name]["sales"] += subtotal
+        summary[name]["qty"] += qty
+        summary[name]["sales"] += subtotal
 
     top_items = []
     for name, v in summary.items():
@@ -185,10 +181,11 @@ def get_sales_summary():
         "top_items": top_items[:10]
     }
 
-# ==============================
-# GET SALES TABLE
-# ==============================
 
+#===============================
+# GET TABLE SUMMARY
+#===============================
+    
 @app.route("/get_sales_table", methods=["GET"])
 def get_sales_table():
     try:
@@ -216,6 +213,7 @@ def get_sales_table():
             "payment_mode": t.get("payment_mode")
         })
 
+    # optional sort (latest first)
     result.sort(key=lambda x: x["datetime"], reverse=True)
 
     return result
