@@ -132,7 +132,7 @@ def get_sales_summary():
     except:
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-    items = data.get("items", [])   # 🔥 gamitin natin ito ulit
+    items = data.get("items", [])
 
     total_sales = 0
     total_profit = 0
@@ -140,8 +140,11 @@ def get_sales_summary():
 
     for item in items:
 
-        # name fix
+        # ========================
+        # 🔥 NAME
+        # ========================
         name = item.get("name")
+
         if not name:
             model = item.get("model", "")
             variant = item.get("variant", "")
@@ -151,27 +154,39 @@ def get_sales_summary():
         if not name:
             name = "Unknown"
 
-        # qty
+        name = name.upper().strip()
+
+        # ========================
+        # 🔥 FIXED QTY
+        # ========================
         try:
-            qty = int(item.get("qty") or 1)
+            qty = int(item.get("qty"))
+            if qty <= 0:
+                qty = 1
         except:
             qty = 1
 
-        # subtotal
+        # ========================
+        # 🔥 PRICE
+        # ========================
         try:
-            subtotal = float(item.get("subtotal") or 0)
+            price = float(item.get("price") or 0)
         except:
-            subtotal = 0
+            price = 0
 
-        # fallback
-        if subtotal == 0:
-            try:
-                price = float(item.get("price") or 0)
+        # ========================
+        # 🔥 FIXED SUBTOTAL
+        # ========================
+        try:
+            subtotal = float(item.get("subtotal"))
+            if subtotal <= 0:
                 subtotal = price * qty
-            except:
-                subtotal = 0
+        except:
+            subtotal = price * qty
 
-        # profit
+        # ========================
+        # 🔥 PROFIT
+        # ========================
         try:
             profit = float(item.get("profit") or 0)
         except:
@@ -186,11 +201,15 @@ def get_sales_summary():
         summary[name]["qty"] += qty
         summary[name]["sales"] += subtotal
 
+    # ========================
+    # FINAL OUTPUT
+    # ========================
     top_items = [
         {"name": k, "qty": v["qty"], "sales": v["sales"]}
         for k, v in summary.items()
     ]
 
+    # 🔥 SORT BY SALES (pwede mo palitan qty kung gusto mo)
     top_items.sort(key=lambda x: x["sales"], reverse=True)
 
     return {
