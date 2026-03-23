@@ -140,30 +140,35 @@ def get_sales_summary():
     summary = {}
 
     # ========================
-    # SAFE LOOP: TRANSACTIONS
+    # 🔥 COLLECT ALL ITEMS
     # ========================
+    all_items = []
+
+    # from transactions
     for trx in transactions:
+        total_sales += float(trx.get("total_amount") or 0)
+        all_items.extend(trx.get("items") or [])
 
+    # from root
+    all_items.extend(root_items)
+
+    # ========================
+    # 🔥 PROCESS ALL ITEMS
+    # ========================
+    for item in all_items:
         try:
-            total_sales += float(trx.get("total_amount") or 0)
-        except:
-            pass
+            name = (
+                item.get("name")
+                or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}".strip()
+            )
 
-        trx_items = trx.get("items") or []
-
-        for item in trx_items:
-
-            name = item.get("name") or f"{item.get('model','')} {item.get('variant','')}".strip()
             if not name:
                 continue
 
             qty = int(item.get("qty") or 1)
-            subtotal = float(item.get("subtotal") or 0)
+            price = float(item.get("price") or 0)
+            subtotal = float(item.get("subtotal") or (price * qty))
             profit = float(item.get("profit") or 0)
-
-            if subtotal == 0:
-                price = float(item.get("price") or 0)
-                subtotal = price * qty
 
             total_profit += profit
 
@@ -173,34 +178,11 @@ def get_sales_summary():
             summary[name]["qty"] += qty
             summary[name]["sales"] += subtotal
 
-    # ========================
-    # SAFE LOOP: ROOT ITEMS
-    # ========================
-    for item in root_items:
-
-        name = item.get("name") or f"{item.get('model','')} {item.get('variant','')}".strip()
-        if not name:
-            continue
-
-        qty = int(item.get("qty") or 1)
-        subtotal = float(item.get("subtotal") or 0)
-        profit = float(item.get("profit") or 0)
-
-        if subtotal == 0:
-            price = float(item.get("price") or 0)
-            subtotal = price * qty
-
-        total_profit += profit
-        total_sales += subtotal
-
-        if name not in summary:
-            summary[name] = {"qty": 0, "sales": 0}
-
-        summary[name]["qty"] += qty
-        summary[name]["sales"] += subtotal
+        except Exception as e:
+            print("ITEM ERROR:", e)
 
     # ========================
-    # FINAL LIST
+    # FINAL OUTPUT
     # ========================
     top_items = [
         {"name": k, "qty": v["qty"], "sales": v["sales"]}
