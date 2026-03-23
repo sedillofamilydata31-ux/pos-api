@@ -139,7 +139,7 @@ def get_sales_summary():
     summary = {}
 
     # ========================
-    # 🔥 COLLECT ONLY VALID SALES ITEMS
+    # 🔥 COLLECT ITEMS (FIXED)
     # ========================
     all_items = []
 
@@ -149,28 +149,22 @@ def get_sales_summary():
         except:
             pass
 
-        for item in trx.get("items") or []:
+        # 🔥 IMPORTANT: kunin lahat ng items
+        all_items.extend(trx.get("items") or [])
 
-            # 🔥 siguraduhin valid item
-            if not item.get("transaction_id"):
-                continue
-
-            all_items.append(item)
-
-    print("VALID ITEMS:", len(all_items))  # debug
+    print("TOTAL ITEMS:", len(all_items))  # debug
 
     # ========================
     # 🔥 PROCESS ITEMS
     # ========================
     for item in all_items:
         try:
-            # 🔥 FIX NAME (para hindi mawala serial/non-serial)
             name = (
                 item.get("name")
                 or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}"
             ).strip().upper()
 
-            # optional normalize
+            # normalize (optional)
             name = name.replace("WIRED", "").replace("WIRELESS", "").strip()
 
             if not name:
@@ -200,7 +194,6 @@ def get_sales_summary():
         for k, v in summary.items()
     ]
 
-    # 🔥 SORT BY QTY
     top_items.sort(key=lambda x: x["qty"], reverse=True)
 
     return {
