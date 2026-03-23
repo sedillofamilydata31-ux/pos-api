@@ -133,34 +133,45 @@ def get_sales_summary():
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
     transactions = data.get("transactions") or []
-    root_items = data.get("items") or []
 
     total_sales = 0
     total_profit = 0
     summary = {}
 
     # ========================
-    # 🔥 COLLECT ALL ITEMS
+    # 🔥 COLLECT ONLY VALID SALES ITEMS
     # ========================
     all_items = []
 
-    # from transactions
     for trx in transactions:
-        total_sales += float(trx.get("total_amount") or 0)
-        all_items.extend(trx.get("items") or [])
+        try:
+            total_sales += float(trx.get("total_amount") or 0)
+        except:
+            pass
 
-    # from root
-    all_items.extend(root_items)
+        for item in trx.get("items") or []:
+
+            # 🔥 siguraduhin valid item
+            if not item.get("transaction_id"):
+                continue
+
+            all_items.append(item)
+
+    print("VALID ITEMS:", len(all_items))  # debug
 
     # ========================
-    # 🔥 PROCESS ALL ITEMS
+    # 🔥 PROCESS ITEMS
     # ========================
     for item in all_items:
         try:
+            # 🔥 FIX NAME (para hindi mawala serial/non-serial)
             name = (
                 item.get("name")
-                or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}".strip()
-            )
+                or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}"
+            ).strip().upper()
+
+            # optional normalize
+            name = name.replace("WIRED", "").replace("WIRELESS", "").strip()
 
             if not name:
                 continue
@@ -189,7 +200,7 @@ def get_sales_summary():
         for k, v in summary.items()
     ]
 
-    # 🔥 SORT BY QTY (TOP SELLING)
+    # 🔥 SORT BY QTY
     top_items.sort(key=lambda x: x["qty"], reverse=True)
 
     return {
