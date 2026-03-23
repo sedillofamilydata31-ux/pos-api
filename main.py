@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 import os
 import json
-import sqlite3
 
 app = Flask(__name__)
 
@@ -128,67 +127,77 @@ def get_sales():
 @app.route("/get_sales_summary", methods=["GET"])
 def get_sales_summary():
     try:
-        conn = sqlite3.connect("sales.db")
-        cursor = conn.cursor()
+        with open("sales.json") as f:
+            data = json.load(f)
+    except:
+        return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-        # ============================
-        # 🔥 GET ALL SALES ITEMS
-        # ============================
-        cursor.execute("""
-            SELECT 
-                model,
-                variant,
-                parts,
-                SUM(qty) as total_qty,
-                SUM(subtotal) as total_sales,
-                SUM(profit) as total_profit
-            FROM sales_items
-            GROUP BY model, variant, parts
-            ORDER BY total_sales DESC
-            LIMIT 10
-        """)
+    items = data.get("items", [])   # 🔥 gamitin natin ito ulit
 
-        rows = cursor.fetchall()
+    total_sales = 0
+    total_profit = 0
+    summary = {}
 
-        top_items = []
-        total_sales = 0
-        total_profit = 0
+    for item in items:
 
-        for r in rows:
-            model = r[0] or ""
-            variant = r[1] or ""
-            parts = r[2] or ""
-
+        # name fix
+        name = item.get("name")
+        if not name:
+            model = item.get("model", "")
+            variant = item.get("variant", "")
+            parts = item.get("parts", "")
             name = f"{model} {variant} {parts}".strip()
 
-            qty = r[3] or 0
-            sales = r[4] or 0
-            profit = r[5] or 0
+        if not name:
+            name = "Unknown"
 
-            top_items.append({
-                "name": name,
-                "qty": qty,
-                "sales": sales
-            })
+        # qty
+        try:
+            qty = int(item.get("qty") or 1)
+        except:
+            qty = 1
 
-            total_sales += sales
-            total_profit += profit
+        # subtotal
+        try:
+            subtotal = float(item.get("subtotal") or 0)
+        except:
+            subtotal = 0
 
-        conn.close()
+        # fallback
+        if subtotal == 0:
+            try:
+                price = float(item.get("price") or 0)
+                subtotal = price * qty
+            except:
+                subtotal = 0
 
-        return {
-            "total_sales": total_sales,
-            "total_profit": total_profit,
-            "top_items": top_items
-        }
+        # profit
+        try:
+            profit = float(item.get("profit") or 0)
+        except:
+            profit = 0
 
-    except Exception as e:
-        return {
-            "total_sales": 0,
-            "total_profit": 0,
-            "top_items": [],
-            "error": str(e)
-        }
+        total_sales += subtotal
+        total_profit += profit
+
+        if name not in summary:
+            summary[name] = {"qty": 0, "sales": 0}
+
+        summary[name]["qty"] += qty
+        summary[name]["sales"] += subtotal
+
+    top_items = [
+        {"name": k, "qty": v["qty"], "sales": v["sales"]}
+        for k, v in summary.items()
+    ]
+
+    top_items.sort(key=lambda x: x["sales"], reverse=True)
+
+    return {
+        "total_sales": total_sales,
+        "total_profit": total_profit,
+        "top_items": top_items[:10]
+    }
 
 #===============================
 # GET TABLE SUMMARY
