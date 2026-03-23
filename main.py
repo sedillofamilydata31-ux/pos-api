@@ -132,69 +132,66 @@ def get_sales_summary():
     except:
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-    transactions = data.get("transactions") or []
+    items = data.get("items", [])   # 🔥 gamitin natin ito ulit
 
     total_sales = 0
     total_profit = 0
     summary = {}
 
-    # ========================
-    # 🔥 COLLECT ITEMS (FIXED)
-    # ========================
-    all_items = []
+    for item in items:
 
-    for trx in transactions:
+        # name fix
+        name = item.get("name")
+        if not name:
+            model = item.get("model", "")
+            variant = item.get("variant", "")
+            parts = item.get("parts", "")
+            name = f"{model} {variant} {parts}".strip()
+
+        if not name:
+            name = "Unknown"
+
+        # qty
         try:
-            total_sales += float(trx.get("total_amount") or 0)
-        except:
-            pass
-
-        # 🔥 IMPORTANT: kunin lahat ng items
-        all_items.extend(trx.get("items") or [])
-
-    print("TOTAL ITEMS:", len(all_items))  # debug
-
-    # ========================
-    # 🔥 PROCESS ITEMS
-    # ========================
-    for item in all_items:
-        try:
-            name = (
-                item.get("name")
-                or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}"
-            ).strip().upper()
-
-            # normalize (optional)
-            name = name.replace("WIRED", "").replace("WIRELESS", "").strip()
-
-            if not name:
-                continue
-
             qty = int(item.get("qty") or 1)
-            price = float(item.get("price") or 0)
-            subtotal = float(item.get("subtotal") or (price * qty))
+        except:
+            qty = 1
+
+        # subtotal
+        try:
+            subtotal = float(item.get("subtotal") or 0)
+        except:
+            subtotal = 0
+
+        # fallback
+        if subtotal == 0:
+            try:
+                price = float(item.get("price") or 0)
+                subtotal = price * qty
+            except:
+                subtotal = 0
+
+        # profit
+        try:
             profit = float(item.get("profit") or 0)
+        except:
+            profit = 0
 
-            total_profit += profit
+        total_sales += subtotal
+        total_profit += profit
 
-            if name not in summary:
-                summary[name] = {"qty": 0, "sales": 0}
+        if name not in summary:
+            summary[name] = {"qty": 0, "sales": 0}
 
-            summary[name]["qty"] += qty
-            summary[name]["sales"] += subtotal
+        summary[name]["qty"] += qty
+        summary[name]["sales"] += subtotal
 
-        except Exception as e:
-            print("ITEM ERROR:", e)
-
-    # ========================
-    # FINAL OUTPUT
-    # ========================
     top_items = [
         {"name": k, "qty": v["qty"], "sales": v["sales"]}
         for k, v in summary.items()
     ]
 
-    top_items.sort(key=lambda x: x["qty"], reverse=True)
+    top_items.sort(key=lambda x: x["sales"], reverse=True)
 
     return {
         "total_sales": total_sales,
