@@ -255,6 +255,36 @@ def get_sales_table():
     return result
 
 # ==============================
+# JOB ORDER SYSTEM
+# ==============================
+
+job_orders = []
+
+@app.route("/create_job_order", methods=["POST"])
+def create_job_order():
+    global job_orders
+
+    data = request.json
+    data["status"] = "pending"
+
+    job_orders.append(data)
+
+    return jsonify({"status": "saved"})
+
+
+@app.route("/get_job_order", methods=["GET"])
+def get_job_order():
+    global job_orders
+
+    for job in job_orders:
+        if job["status"] == "pending":
+            job["status"] = "done"
+            return jsonify(job)
+
+    return jsonify({"status": "none"})
+
+
+# ==============================
 # RUN SERVER
 # ==============================
 
