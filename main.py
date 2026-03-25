@@ -264,26 +264,29 @@ job_orders = []
 
 @app.route("/create_job_order", methods=["POST"])
 def create_job_order():
-    global job_orders
+    global job_orders, latest_job_order
 
     data = request.json
-    data["status"] = "pending"
+    data["status"] = "done"
 
     job_orders.append(data)
+
+    # 🔥 IMPORTANT
+    latest_job_order = data
 
     return jsonify({"status": "saved"})
 
 
+latest_job_order = {"status": "none"}
+
 @app.route("/get_job_order", methods=["GET"])
 def get_job_order():
-    global job_orders
+    global latest_job_order
 
-    for job in job_orders:
-        if job["status"] == "pending":
-            job["status"] = "done"
-            return jsonify(job)
+    data = latest_job_order
+    latest_job_order = {"status": "none"}  # 🔥 CLEAR AFTER READ
 
-    return jsonify({"status": "none"})
+    return jsonify(data)
 
 
 # ==============================
