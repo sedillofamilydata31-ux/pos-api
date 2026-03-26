@@ -40,6 +40,11 @@ def init_db():
 
 # 🔥 CALL THIS ON START
 init_db()
+# ==============================
+# MEMORY STORAGE (FIX)
+# ==============================
+inventory_data = {}
+sales_data = {}
 
 def check_api():
     key = request.headers.get("x-api-key")
@@ -78,20 +83,13 @@ def sync_inventory():
     if not tenant:
         return {"error": "no tenant"}, 400
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
+    # 🔥 SAVE TO MEMORY
+    inventory_data[tenant] = data
 
-    cursor.execute("""
-        INSERT OR REPLACE INTO inventory (tenant, data)
-        VALUES (?, ?)
-    """, (tenant, json.dumps(data)))
-
-    conn.commit()
-    conn.close()
-
-    print("INVENTORY SAVED FOR:", tenant[:10])
+    print("INVENTORY SAVED (MEMORY) FOR:", tenant[:10])
 
     return {"status": "saved"}
+
 
 
 # ==============================
@@ -105,18 +103,7 @@ def get_inventory():
     if not tenant:
         return {"error": "no tenant"}, 400
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT data FROM inventory WHERE tenant=?", (tenant,))
-    row = cursor.fetchone()
-
-    conn.close()
-
-    if row:
-        return json.loads(row[0])
-
-    return {}
+    return inventory_data.get(tenant, {})
 
 
 # ==============================
@@ -130,18 +117,7 @@ def get_summary():
     if not tenant:
         return []
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT data FROM inventory WHERE tenant=?", (tenant,))
-    row = cursor.fetchone()
-
-    conn.close()
-
-    if row:
-        data = json.loads(row[0])
-    else:
-        data = {}
+    data = inventory_data.get(tenant, {})  # 🔥 MEMORY NA
 
     summary = {}
 
@@ -191,16 +167,7 @@ def sync_sales():
     if not tenant:
         return {"error": "no tenant"}, 400
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT data FROM sales WHERE tenant=?", (tenant,))
-    row = cursor.fetchone()
-
-    if row:
-        existing = json.loads(row[0])
-    else:
-        existing = {"transactions": [], "items": []}
+    existing = sales_data.get(tenant, {"transactions": [], "items": []})
 
     # merge transactions
     existing_ids = {t.get("transaction_id") for t in existing["transactions"]}
@@ -217,21 +184,10 @@ def sync_sales():
         if key not in existing_items:
             existing["items"].append(item)
 
-    # 🔥 SKIP EMPTY
-    if not data.get("transactions") and not data.get("items"):
-        print("⚠️ EMPTY SALES — SKIP")
-        return {"status": "skipped"}
+    # 🔥 SAVE TO MEMORY
+    sales_data[tenant] = existing
 
-    # SAVE TO SQLITE
-    cursor.execute("""
-        INSERT OR REPLACE INTO sales (tenant, data)
-        VALUES (?, ?)
-    """, (tenant, json.dumps(existing)))
-
-    conn.commit()
-    conn.close()
-
-    print("SALES SAVED FOR:", tenant[:10])
+    print("SALES SAVED (MEMORY) FOR:", tenant[:10])
 
     return {"status": "saved"}
 
@@ -247,18 +203,7 @@ def get_sales():
     if not tenant:
         return {"error": "no tenant"}, 400
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT data FROM sales WHERE tenant=?", (tenant,))
-    row = cursor.fetchone()
-
-    conn.close()
-
-    if row:
-        return json.loads(row[0])
-
-    return {"transactions": [], "items": []}
+    return sales_data.get(tenant, {"transactions": [], "items": []})
 
 
 #===============================
@@ -272,18 +217,8 @@ def get_sales_summary():
     if not tenant:
         return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
 
-    cursor.execute("SELECT data FROM sales WHERE tenant=?", (tenant,))
-    row = cursor.fetchone()
-
-    conn.close()
-
-    if row:
-        data = json.loads(row[0])
-    else:
-        data = {}
+    data = sales_data.get(tenant, {})
         
     items = data.get("items", [])
 
@@ -361,18 +296,7 @@ def get_sales_table():
     if not tenant:
         return []
 
-    conn = sqlite3.connect("cloud.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT data FROM sales WHERE tenant=?", (tenant,))
-    row = cursor.fetchone()
-
-    conn.close()
-
-    if row:
-        data = json.loads(row[0])
-    else:
-        data = {}
+    data = sales_data.get(tenant, {})
     transactions = data.get("transactions", [])
 
     result = []
