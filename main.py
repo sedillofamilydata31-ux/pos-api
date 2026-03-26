@@ -1,25 +1,26 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS   # ADD THIS
 import os
+import json
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # ADD THIS
 
 # ==============================
-# API KEY
-# ==============================
-
-API_KEY = "MC_POS_APIKEY_2026"
-
-def check_api():
-    return request.headers.get("x-api-key") == API_KEY
-
-# ==============================
-# MEMORY STORAGE (MULTI-TENANT)
+# LOAD EXISTING DATA (PERSIST)
 # ==============================
 
 inventory_data = {}
-sales_data = {}
+sales_data = {"transactions": [], "items": []}
+
+if os.path.exists("inventory.json"):
+    with open("inventory.json") as f:
+        inventory_data = json.load(f)
+
+if os.path.exists("sales.json"):
+    with open("sales.json") as f:
+        sales_data = json.load(f)
+
 
 # ==============================
 # HOME
@@ -29,29 +30,22 @@ sales_data = {}
 def home():
     return "API RUNNING"
 
+
 # ==============================
 # INVENTORY SYNC
 # ==============================
 
 @app.route("/sync_inventory", methods=["POST"])
 def sync_inventory():
+    global inventory_data
+    inventory_data = request.json
 
-    if not check_api():
-        return {"error": "unauthorized"}, 401
+    with open("inventory.json", "w") as f:
+        json.dump(inventory_data, f)
 
-    req = request.json or {}
-
-    tenant = req.get("tenant")
-    data = req.get("data")
-
-    if not tenant:
-        return {"error": "no tenant"}, 400
-
-    inventory_data[tenant] = data
-
-    print("INVENTORY SAVED FOR:", tenant[:10])
-
+    print("FULL INVENTORY RECEIVED")
     return jsonify({"status": "saved"})
+
 
 # ==============================
 # GET INVENTORY
@@ -59,12 +53,8 @@ def sync_inventory():
 
 @app.route("/get_inventory", methods=["GET"])
 def get_inventory():
-    tenant = request.args.get("tenant")
+    return jsonify(inventory_data)
 
-    if not tenant:
-        return jsonify({})
-
-    return jsonify(inventory_data.get(tenant, {}))
 
 # ==============================
 # INVENTORY SUMMARY
@@ -72,29 +62,40 @@ def get_inventory():
 
 @app.route("/get_summary", methods=["GET"])
 def get_summary():
-    tenant = request.args.get("tenant")
-
-    if not tenant:
-        return jsonify([])
-
-    data = inventory_data.get(tenant, {})
-
     summary = {}
 
-    for item in data.get("batch", []):
-        name = f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}".strip()
-        summary.setdefault(name, {"qty": 0, "price": item.get("srp", 0)})
+    # batch items
+    for item in inventory_data.get("batch", []):
+        name = f"{item['model']} {item['variant']} {item['parts']}"
+
+        if name not in summary:
+            summary[name] = {"qty": 0, "price": item["srp"]}
+
         summary[name]["qty"] += 1
 
-    for item in data.get("nonserial", []):
-        name = f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}".strip()
-        summary.setdefault(name, {"qty": 0, "price": item.get("srp", 0)})
-        summary[name]["qty"] += int(item.get("qty", 0))
+    # non-serial items
+    for item in inventory_data.get("nonserial", []):
+        name = f"{item['model']} {item['variant']} {item['parts']}"
 
-    result = [{"name": k, "qty": v["qty"], "price": v["price"]} for k, v in summary.items()]
+        if name not in summary:
+            summary[name] = {"qty": 0, "price": item["srp"]}
+
+        summary[name]["qty"] += int(item["qty"])
+
+    # convert to list
+    result = []
+    for name, v in summary.items():
+        result.append({
+            "name": name,
+            "qty": v["qty"],
+            "price": v["price"]
+        })
+
+    # sort by highest qty
     result.sort(key=lambda x: x["qty"], reverse=True)
 
     return jsonify(result)
+
 
 # ==============================
 # SALES SYNC
@@ -102,23 +103,15 @@ def get_summary():
 
 @app.route("/sync_sales", methods=["POST"])
 def sync_sales():
+    global sales_data
+    sales_data = request.json
 
-    if not check_api():
-        return {"error": "unauthorized"}, 401
+    with open("sales.json", "w") as f:
+        json.dump(sales_data, f)
 
-    req = request.json or {}
-
-    tenant = req.get("tenant")
-    data = req.get("data")
-
-    if not tenant:
-        return {"error": "no tenant"}, 400
-
-    sales_data[tenant] = data
-
-    print("SALES SAVED FOR:", tenant[:10])
-
+    print("SALES RECEIVED")
     return jsonify({"status": "saved"})
+
 
 # ==============================
 # GET SALES
@@ -126,22 +119,21 @@ def sync_sales():
 
 @app.route("/get_sales", methods=["GET"])
 def get_sales():
-    tenant = request.args.get("tenant")
+    return jsonify(sales_data)
 
-    if not tenant:
-        return jsonify({"transactions": [], "items": []})
 
-    return jsonify(sales_data.get(tenant, {"transactions": [], "items": []}))
-
-# ==============================
-# SALES SUMMARY
-# ==============================
+#===============================
+# GET SALES SUMMARY
+#===============================
 
 @app.route("/get_sales_summary", methods=["GET"])
 def get_sales_summary():
-    tenant = request.args.get("tenant")
+    try:
+        with open("sales.json") as f:
+            data = json.load(f)
+    except:
+        return {"total_sales": 0, "total_profit": 0, "top_items": []}
 
-    data = sales_data.get(tenant, {"items": []})
     items = data.get("items", [])
 
     total_sales = 0
@@ -149,22 +141,77 @@ def get_sales_summary():
     summary = {}
 
     for item in items:
-        name = item.get("name") or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}"
+
+        # ========================
+        # 🔥 NAME
+        # ========================
+        name = item.get("name")
+
+        if not name:
+            model = item.get("model", "")
+            variant = item.get("variant", "")
+            parts = item.get("parts", "")
+            name = f"{model} {variant} {parts}".strip()
+
+        if not name:
+            name = "Unknown"
+
         name = name.upper().strip()
 
-        qty = int(item.get("qty", 1))
-        price = float(item.get("price", 0))
-        subtotal = float(item.get("subtotal", price * qty))
-        profit = float(item.get("profit", 0))
+        # ========================
+        # 🔥 FIXED QTY
+        # ========================
+        try:
+            qty = int(item.get("qty"))
+            if qty <= 0:
+                qty = 1
+        except:
+            qty = 1
+
+        # ========================
+        # 🔥 PRICE
+        # ========================
+        try:
+            price = float(item.get("price") or 0)
+        except:
+            price = 0
+
+        # ========================
+        # 🔥 FIXED SUBTOTAL
+        # ========================
+        try:
+            subtotal = float(item.get("subtotal"))
+            if subtotal <= 0:
+                subtotal = price * qty
+        except:
+            subtotal = price * qty
+
+        # ========================
+        # 🔥 PROFIT
+        # ========================
+        try:
+            profit = float(item.get("profit") or 0)
+        except:
+            profit = 0
 
         total_sales += subtotal
         total_profit += profit
 
-        summary.setdefault(name, {"qty": 0, "sales": 0})
+        if name not in summary:
+            summary[name] = {"qty": 0, "sales": 0}
+
         summary[name]["qty"] += qty
         summary[name]["sales"] += subtotal
 
-    top_items = [{"name": k, "qty": v["qty"], "sales": v["sales"]} for k, v in summary.items()]
+    # ========================
+    # FINAL OUTPUT
+    # ========================
+    top_items = [
+        {"name": k, "qty": v["qty"], "sales": v["sales"]}
+        for k, v in summary.items()
+    ]
+
+    # 🔥 SORT BY SALES (pwede mo palitan qty kung gusto mo)
     top_items.sort(key=lambda x: x["sales"], reverse=True)
 
     return {
@@ -173,15 +220,18 @@ def get_sales_summary():
         "top_items": top_items[:10]
     }
 
-# ==============================
-# SALES TABLE
-# ==============================
-
+#===============================
+# GET TABLE SUMMARY
+#===============================
+    
 @app.route("/get_sales_table", methods=["GET"])
 def get_sales_table():
-    tenant = request.args.get("tenant")
+    try:
+        with open("sales.json") as f:
+            data = json.load(f)
+    except:
+        return []
 
-    data = sales_data.get(tenant, {"transactions": []})
     transactions = data.get("transactions", [])
 
     result = []
@@ -201,12 +251,46 @@ def get_sales_table():
             "payment_mode": t.get("payment_mode")
         })
 
-    result.sort(key=lambda x: x.get("datetime", ""), reverse=True)
+    # optional sort (latest first)
+    result.sort(key=lambda x: x["datetime"], reverse=True)
 
     return result
 
 # ==============================
-# RUN
+# JOB ORDER SYSTEM
+# ==============================
+
+job_orders = []
+
+@app.route("/create_job_order", methods=["POST"])
+def create_job_order():
+    global job_orders, latest_job_order
+
+    data = request.json
+    data["status"] = "done"
+
+    job_orders.append(data)
+
+    # 🔥 IMPORTANT
+    latest_job_order = data
+
+    return jsonify({"status": "saved"})
+
+
+latest_job_order = {"status": "none"}
+
+@app.route("/get_job_order", methods=["GET"])
+def get_job_order():
+    global latest_job_order
+
+    data = latest_job_order
+    latest_job_order = {"status": "none"}  # 🔥 CLEAR AFTER READ
+
+    return jsonify(data)
+
+
+# ==============================
+# RUN SERVER
 # ==============================
 
 if __name__ == "__main__":
