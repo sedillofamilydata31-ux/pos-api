@@ -81,6 +81,11 @@ def sync_inventory():
     conn = sqlite3.connect("cloud.db")
     cursor = conn.cursor()
 
+    # 🔥 PREVENT EMPTY OVERWRITE
+    if not data.get("nonserial") and not data.get("batch"):
+        print("⚠️ EMPTY INVENTORY — SKIP SAVE")
+        return {"status": "skipped"}
+
     cursor.execute("""
         INSERT OR REPLACE INTO inventory (tenant, data)
         VALUES (?, ?)
@@ -88,6 +93,7 @@ def sync_inventory():
 
     conn.commit()
     conn.close()
+
     print("INVENTORY SAVED FOR:", tenant[:10])
 
     return {"status": "saved"}
@@ -215,6 +221,11 @@ def sync_sales():
         key = (item.get("name"), item.get("datetime"))
         if key not in existing_items:
             existing["items"].append(item)
+
+    # 🔥 SKIP EMPTY
+    if not data.get("transactions") and not data.get("items"):
+        print("⚠️ EMPTY SALES — SKIP")
+        return {"status": "skipped"}
 
     # SAVE TO SQLITE
     cursor.execute("""
