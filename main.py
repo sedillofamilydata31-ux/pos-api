@@ -11,7 +11,7 @@ CORS(app)  # ADD THIS
 # ==============================
 
 inventory_data = {}
-sales_data = {"transactions": [], "items": []}
+sales_data = {}
 
 if os.path.exists("inventory.json"):
     with open("inventory.json") as f:
@@ -38,12 +38,20 @@ def home():
 @app.route("/sync_inventory", methods=["POST"])
 def sync_inventory():
     global inventory_data
-    inventory_data = request.json
+
+    tenant = request.json.get("tenant")
+    data = request.json.get("data")
+
+    if not tenant:
+        return {"error": "no tenant"}, 400
+
+    inventory_data[tenant] = data
 
     with open("inventory.json", "w") as f:
         json.dump(inventory_data, f)
 
-    print("FULL INVENTORY RECEIVED")
+    print(f"FULL INVENTORY RECEIVED: {tenant}")
+
     return jsonify({"status": "saved"})
 
 
@@ -53,7 +61,12 @@ def sync_inventory():
 
 @app.route("/get_inventory", methods=["GET"])
 def get_inventory():
-    return jsonify(inventory_data)
+    tenant = request.args.get("tenant")
+
+    if not tenant:
+        return {}
+
+    return jsonify(inventory_data.get(tenant, {}))
 
 
 # ==============================
@@ -62,10 +75,12 @@ def get_inventory():
 
 @app.route("/get_summary", methods=["GET"])
 def get_summary():
+    tenant = request.args.get("tenant")
+    data = inventory_data.get(tenant, {})
+
     summary = {}
 
-    # batch items
-    for item in inventory_data.get("batch", []):
+    for item in data.get("batch", []):
         name = f"{item['model']} {item['variant']} {item['parts']}"
 
         if name not in summary:
@@ -73,8 +88,7 @@ def get_summary():
 
         summary[name]["qty"] += 1
 
-    # non-serial items
-    for item in inventory_data.get("nonserial", []):
+    for item in data.get("nonserial", []):
         name = f"{item['model']} {item['variant']} {item['parts']}"
 
         if name not in summary:
@@ -82,7 +96,6 @@ def get_summary():
 
         summary[name]["qty"] += int(item["qty"])
 
-    # convert to list
     result = []
     for name, v in summary.items():
         result.append({
@@ -91,7 +104,6 @@ def get_summary():
             "price": v["price"]
         })
 
-    # sort by highest qty
     result.sort(key=lambda x: x["qty"], reverse=True)
 
     return jsonify(result)
@@ -100,39 +112,46 @@ def get_summary():
 # ==============================
 # SALES SYNC
 # ==============================
-
 @app.route("/sync_sales", methods=["POST"])
 def sync_sales():
     global sales_data
-    sales_data = request.json
+
+    tenant = request.json.get("tenant")
+    data = request.json.get("data")
+
+    if not tenant:
+        return {"error": "no tenant"}, 400
+
+    sales_data[tenant] = data
 
     with open("sales.json", "w") as f:
         json.dump(sales_data, f)
 
-    print("SALES RECEIVED")
+    print(f"SALES RECEIVED: {tenant}")
+
     return jsonify({"status": "saved"})
 
 
 # ==============================
 # GET SALES
 # ==============================
-
 @app.route("/get_sales", methods=["GET"])
 def get_sales():
-    return jsonify(sales_data)
+    tenant = request.args.get("tenant")
+
+    if not tenant:
+        return {}
+
+    return jsonify(sales_data.get(tenant, {}))
 
 
 #===============================
 # GET SALES SUMMARY
 #===============================
-
 @app.route("/get_sales_summary", methods=["GET"])
 def get_sales_summary():
-    try:
-        with open("sales.json") as f:
-            data = json.load(f)
-    except:
-        return {"total_sales": 0, "total_profit": 0, "top_items": []}
+    tenant = request.args.get("tenant")
+    data = sales_data.get(tenant, {})
 
     items = data.get("items", [])
 
@@ -141,56 +160,26 @@ def get_sales_summary():
     summary = {}
 
     for item in items:
-
-        # ========================
-        # 🔥 NAME
-        # ========================
-        name = item.get("name")
-
-        if not name:
-            model = item.get("model", "")
-            variant = item.get("variant", "")
-            parts = item.get("parts", "")
-            name = f"{model} {variant} {parts}".strip()
-
-        if not name:
-            name = "Unknown"
-
+        name = item.get("name") or f"{item.get('model','')} {item.get('variant','')} {item.get('parts','')}"
         name = name.upper().strip()
 
-        # ========================
-        # 🔥 FIXED QTY
-        # ========================
         try:
-            qty = int(item.get("qty"))
-            if qty <= 0:
-                qty = 1
+            qty = int(item.get("qty", 1))
         except:
             qty = 1
 
-        # ========================
-        # 🔥 PRICE
-        # ========================
         try:
-            price = float(item.get("price") or 0)
+            price = float(item.get("price", 0))
         except:
             price = 0
 
-        # ========================
-        # 🔥 FIXED SUBTOTAL
-        # ========================
         try:
-            subtotal = float(item.get("subtotal"))
-            if subtotal <= 0:
-                subtotal = price * qty
+            subtotal = float(item.get("subtotal", price * qty))
         except:
             subtotal = price * qty
 
-        # ========================
-        # 🔥 PROFIT
-        # ========================
         try:
-            profit = float(item.get("profit") or 0)
+            profit = float(item.get("profit", 0))
         except:
             profit = 0
 
@@ -203,15 +192,11 @@ def get_sales_summary():
         summary[name]["qty"] += qty
         summary[name]["sales"] += subtotal
 
-    # ========================
-    # FINAL OUTPUT
-    # ========================
     top_items = [
         {"name": k, "qty": v["qty"], "sales": v["sales"]}
         for k, v in summary.items()
     ]
 
-    # 🔥 SORT BY SALES (pwede mo palitan qty kung gusto mo)
     top_items.sort(key=lambda x: x["sales"], reverse=True)
 
     return {
@@ -223,14 +208,10 @@ def get_sales_summary():
 #===============================
 # GET TABLE SUMMARY
 #===============================
-    
 @app.route("/get_sales_table", methods=["GET"])
 def get_sales_table():
-    try:
-        with open("sales.json") as f:
-            data = json.load(f)
-    except:
-        return []
+    tenant = request.args.get("tenant")
+    data = sales_data.get(tenant, {})
 
     transactions = data.get("transactions", [])
 
@@ -251,7 +232,6 @@ def get_sales_table():
             "payment_mode": t.get("payment_mode")
         })
 
-    # optional sort (latest first)
     result.sort(key=lambda x: x["datetime"], reverse=True)
 
     return result
@@ -259,32 +239,31 @@ def get_sales_table():
 # ==============================
 # JOB ORDER SYSTEM
 # ==============================
-
-job_orders = []
+job_orders = {}
+latest_job_order = {}
 
 @app.route("/create_job_order", methods=["POST"])
 def create_job_order():
-    global job_orders, latest_job_order
+    tenant = request.json.get("tenant")
+    data = request.json.get("data")
 
-    data = request.json
+    if tenant not in job_orders:
+        job_orders[tenant] = []
+
     data["status"] = "done"
 
-    job_orders.append(data)
-
-    # 🔥 IMPORTANT
-    latest_job_order = data
+    job_orders[tenant].append(data)
+    latest_job_order[tenant] = data
 
     return jsonify({"status": "saved"})
 
 
-latest_job_order = {"status": "none"}
-
 @app.route("/get_job_order", methods=["GET"])
 def get_job_order():
-    global latest_job_order
+    tenant = request.args.get("tenant")
 
-    data = latest_job_order
-    latest_job_order = {"status": "none"}  # 🔥 CLEAR AFTER READ
+    data = latest_job_order.get(tenant, {"status": "none"})
+    latest_job_order[tenant] = {"status": "none"}
 
     return jsonify(data)
 
