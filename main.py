@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS   # ADD THIS
 import os
 import json
+import time
 
 app = Flask(__name__)
 CORS(app)  # ADD THIS
@@ -236,37 +237,87 @@ def get_sales_table():
 
     return result
 
+
 # ==============================
-# JOB ORDER SYSTEM
+# JOB ORDER SYSTEM (QUEUE + ACK)
 # ==============================
 job_orders = {}
-latest_job_order = {}
 
+# ==============================
+# CREATE JOB ORDER (QUEUE)
+# ==============================
 @app.route("/create_job_order", methods=["POST"])
 def create_job_order():
     tenant = request.json.get("tenant")
     data = request.json.get("data")
 
+    if not tenant:
+        return {"error": "no tenant"}, 400
+
     if tenant not in job_orders:
         job_orders[tenant] = []
 
-    data["status"] = "done"
+    job = {
+        "id": str(time.time()),   # unique job id
+        "data": data,
+        "status": "pending"
+    }
 
-    job_orders[tenant].append(data)
-    latest_job_order[tenant] = data
+    job_orders[tenant].append(job)
 
-    return jsonify({"status": "saved"})
+    print(f"[JOB QUEUED] {tenant} | total: {len(job_orders[tenant])}")
+
+    return {"status": "queued", "job_id": job["id"]}
 
 
+# ==============================
+# GET JOB ORDER (NO DELETE)
+# ==============================
 @app.route("/get_job_order", methods=["GET"])
 def get_job_order():
     tenant = request.args.get("tenant")
 
-    data = latest_job_order.get(tenant, {"status": "none"})
-    latest_job_order[tenant] = {"status": "none"}
+    if not tenant:
+        return {"status": "no tenant"}
 
-    return jsonify(data)
+    if tenant not in job_orders or not job_orders[tenant]:
+        return {"status": "none"}
 
+    # hanapin first pending job (FIFO)
+    for job in job_orders[tenant]:
+        if job["status"] == "pending":
+            print(f"[JOB SENT] {tenant} | job_id: {job['id']}")
+            return job
+
+    return {"status": "none"}
+
+
+# ==============================
+# ACK JOB ORDER (DELETE AFTER SUCCESS)
+# ==============================
+@app.route("/ack_job_order", methods=["POST"])
+def ack_job_order():
+    tenant = request.json.get("tenant")
+    job_id = request.json.get("job_id")
+
+    if not tenant or not job_id:
+        return {"status": "invalid request"}
+
+    if tenant not in job_orders:
+        return {"status": "no tenant"}
+
+    before = len(job_orders[tenant])
+
+    # remove job after successful execution
+    job_orders[tenant] = [
+        j for j in job_orders[tenant] if j["id"] != job_id
+    ]
+
+    after = len(job_orders[tenant])
+
+    print(f"[JOB ACK] {tenant} | removed: {before - after}")
+
+    return {"status": "acknowledged"}
 
 # ==============================
 # RUN SERVER
